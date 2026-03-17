@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>インクバトル完成版+</title>
+<title>インクバトル安定版</title>
 <style>
 body { margin:0; overflow:hidden; background:black;}
 
@@ -15,7 +15,6 @@ body { margin:0; overflow:hidden; background:black;}
   border-radius:50%;
 }
 
-/* インクゲージ */
 #inkUI{
   position:absolute;
   bottom:20px;
@@ -39,74 +38,77 @@ body { margin:0; overflow:hidden; background:black;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
-const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
-const renderer=new THREE.WebGLRenderer();
-renderer.setSize(innerWidth,innerHeight);
+// ===== 基本 =====
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 scene.add(new THREE.DirectionalLight(0xffffff,1));
 
-// ===== プレイヤー =====
-const player=new THREE.Group();
-player.scale.set(0.7,0.7,0.7);
+// ===== 本体（これだけ動かす） =====
+const player = new THREE.Object3D();
 scene.add(player);
 
-const body=new THREE.Mesh(new THREE.BoxGeometry(1,1.5,0.5),
-new THREE.MeshLambertMaterial({color:0x00ffcc}));
-body.position.y=1.5;
+// ===== 見た目（人） =====
+const human = new THREE.Group();
+const body = new THREE.Mesh(
+  new THREE.BoxGeometry(1,1.5,0.5),
+  new THREE.MeshLambertMaterial({color:0x00ffcc})
+);
+body.position.y = 1.5;
 
-const arm=new THREE.Mesh(new THREE.BoxGeometry(0.3,1,0.3),body.material);
+const arm = new THREE.Mesh(new THREE.BoxGeometry(0.3,1,0.3), body.material);
 arm.position.set(0.8,1.5,0);
 
-const gun=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.3,0.3),
-new THREE.MeshLambertMaterial({color:0x222222}));
+const gun = new THREE.Mesh(
+  new THREE.BoxGeometry(0.8,0.3,0.3),
+  new THREE.MeshLambertMaterial({color:0x222222})
+);
 gun.position.set(1.2,1.5,0);
 
-player.add(body,arm,gun);
+human.add(body, arm, gun);
+player.add(human);
 
-// ===== イカ =====
-const squid=new THREE.Mesh(
-new THREE.ConeGeometry(0.6,1.2,8),
-new THREE.MeshLambertMaterial({color:0x00ffcc})
+// ===== 見た目（イカ） =====
+const squid = new THREE.Mesh(
+  new THREE.ConeGeometry(0.6,1.2,8),
+  new THREE.MeshLambertMaterial({color:0x00ffcc})
 );
-squid.rotation.x=Math.PI;
-scene.add(squid);
-squid.visible=false;
+squid.rotation.x = Math.PI;
+squid.position.y = 0.5;
+player.add(squid);
+squid.visible = false;
 
-// ===== ステージ =====
-const gridSize=20;
-const tiles=[];
-const walls=[];
+// ===== 地面 =====
+const gridSize = 20;
+const tiles = [];
 
-// 地面
 for(let x=0;x<gridSize;x++){
-tiles[x]=[];
-for(let z=0;z<gridSize;z++){
-const tile=new THREE.Mesh(
-new THREE.PlaneGeometry(1,1),
-new THREE.MeshLambertMaterial({color:0x555555})
-);
-tile.rotation.x=-Math.PI/2;
-tile.position.set(x-gridSize/2,0,z-gridSize/2);
-scene.add(tile);
-tiles[x][z]=tile;
-}
+  tiles[x]=[];
+  for(let z=0;z<gridSize;z++){
+    const tile = new THREE.Mesh(
+      new THREE.PlaneGeometry(1,1),
+      new THREE.MeshLambertMaterial({color:0x555555})
+    );
+    tile.rotation.x = -Math.PI/2;
+    tile.position.set(x-gridSize/2,0,z-gridSize/2);
+    scene.add(tile);
+    tiles[x][z]=tile;
+  }
 }
 
-// 壁（適当に配置）
-for(let i=0;i<10;i++){
-const wall=new THREE.Mesh(
-new THREE.BoxGeometry(1,2,1),
-new THREE.MeshLambertMaterial({color:0x888888})
-);
-wall.position.set(
-Math.random()*10-5,
-1,
-Math.random()*10-5
-);
-scene.add(wall);
-walls.push(wall);
+// ===== 壁 =====
+const walls=[];
+for(let i=0;i<8;i++){
+  const w=new THREE.Mesh(
+    new THREE.BoxGeometry(1,2,1),
+    new THREE.MeshLambertMaterial({color:0x888888})
+  );
+  w.position.set(Math.random()*10-5,1,Math.random()*10-5);
+  scene.add(w);
+  walls.push(w);
 }
 
 // ===== 入力 =====
@@ -115,12 +117,12 @@ let shooting=false;
 let squidMode=false;
 
 document.addEventListener("keydown",e=>{
-keys[e.key]=true;
-if(e.key==="Shift") squidMode=true;
+  keys[e.key]=true;
+  if(e.key==="Shift") squidMode=true;
 });
 document.addEventListener("keyup",e=>{
-keys[e.key]=false;
-if(e.key==="Shift") squidMode=false;
+  keys[e.key]=false;
+  if(e.key==="Shift") squidMode=false;
 });
 
 document.addEventListener("mousedown",()=>shooting=true);
@@ -131,11 +133,11 @@ let yaw=0,pitch=0;
 document.body.onclick=()=>document.body.requestPointerLock();
 
 document.addEventListener("mousemove",e=>{
-if(document.pointerLockElement){
-yaw-=e.movementX*0.002;
-pitch-=e.movementY*0.002;
-pitch=Math.max(-0.6,Math.min(0.6,pitch));
-}
+  if(document.pointerLockElement){
+    yaw-=e.movementX*0.002;
+    pitch-=e.movementY*0.002;
+    pitch=Math.max(-0.6,Math.min(0.6,pitch));
+  }
 });
 
 // ===== インク =====
@@ -151,10 +153,10 @@ let cooldown=0;
 function animate(){
 requestAnimationFrame(animate);
 
-// インク回復
+// ===== インク回復 =====
 if(!shooting || squidMode){
-ink+=0.3;
-if(ink>100) ink=100;
+  ink+=0.3;
+  if(ink>100) ink=100;
 }
 inkBar.style.width=ink+"%";
 
@@ -164,122 +166,98 @@ const tz=Math.floor(player.position.z+gridSize/2);
 
 let onInk=false;
 if(tiles[tx] && tiles[tx][tz]){
-if(tiles[tx][tz].material.color.getHex()===0x00ffcc){
-onInk=true;
-}
+  if(tiles[tx][tz].material.color.getHex()===0x00ffcc){
+    onInk=true;
+  }
 }
 
-// ===== モード =====
+// ===== モード切替 =====
 if(squidMode && onInk){
-player.visible=false;
-squid.visible=true;
-squid.position.copy(player.position);
+  human.visible=false;
+  squid.visible=true;
 }else{
-player.visible=true;
-squid.visible=false;
+  human.visible=true;
+  squid.visible=false;
 }
 
 // ===== 移動 =====
 let speed=(squidMode && onInk)?0.2:0.1;
 
 if(keys["w"]){
-player.position.x-=Math.sin(yaw)*speed;
-player.position.z-=Math.cos(yaw)*speed;
+  player.position.x -= Math.sin(yaw)*speed;
+  player.position.z -= Math.cos(yaw)*speed;
 }
 if(keys["s"]){
-player.position.x+=Math.sin(yaw)*speed;
-player.position.z+=Math.cos(yaw)*speed;
+  player.position.x += Math.sin(yaw)*speed;
+  player.position.z += Math.cos(yaw)*speed;
 }
 if(keys["a"]){
-player.position.x-=Math.cos(yaw)*speed;
-player.position.z+=Math.sin(yaw)*speed;
+  player.position.x -= Math.cos(yaw)*speed;
+  player.position.z += Math.sin(yaw)*speed;
 }
 if(keys["d"]){
-player.position.x+=Math.cos(yaw)*speed;
-player.position.z-=Math.sin(yaw)*speed;
+  player.position.x += Math.cos(yaw)*speed;
+  player.position.z -= Math.sin(yaw)*speed;
 }
 
-player.rotation.y=yaw;
-squid.rotation.y=yaw;
-
-// ===== 壁登り =====
-walls.forEach(w=>{
-const dx=player.position.x-w.position.x;
-const dz=player.position.z-w.position.z;
-
-if(Math.abs(dx)<0.7 && Math.abs(dz)<0.7){
-if(onInk && squidMode){
-player.position.y+=0.1;
-}
-}
-});
+player.rotation.y = yaw;
 
 // ===== 発射 =====
 cooldown--;
 
 if(shooting && cooldown<=0 && !squidMode && ink>1){
-cooldown=6;
-ink-=1;
+  cooldown=6;
+  ink-=1;
 
-raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
-const dir=raycaster.ray.direction.clone();
+  raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
+  const dir=raycaster.ray.direction.clone();
 
-const bullet=new THREE.Mesh(
-new THREE.SphereGeometry(0.15),
-new THREE.MeshBasicMaterial({color:0x00ffcc})
-);
+  const bullet=new THREE.Mesh(
+    new THREE.SphereGeometry(0.15),
+    new THREE.MeshBasicMaterial({color:0x00ffcc})
+  );
 
-bullet.position.copy(player.position).add(new THREE.Vector3(0,1.5,0));
-bullet.velocity=dir.multiplyScalar(0.4);
+  bullet.position.copy(player.position).add(new THREE.Vector3(0,1.5,0));
+  bullet.velocity=dir.multiplyScalar(0.4);
 
-bullets.push(bullet);
-scene.add(bullet);
+  bullets.push(bullet);
+  scene.add(bullet);
 
-arm.rotation.x=-1.2;
+  arm.rotation.x=-1.2;
 }else{
-arm.rotation.x*=0.8;
+  arm.rotation.x*=0.8;
 }
 
 // ===== 弾 =====
 bullets.forEach((b,i)=>{
-b.velocity.y-=0.01;
-b.position.add(b.velocity);
+  b.velocity.y-=0.01;
+  b.position.add(b.velocity);
 
-// 着弾
-if(b.position.y<=0.1){
+  if(b.position.y<=0.1){
 
-// 円形塗り
-for(let x=-2;x<=2;x++){
-for(let z=-2;z<=2;z++){
-const tx=Math.floor(b.position.x+gridSize/2+x);
-const tz=Math.floor(b.position.z+gridSize/2+z);
+    for(let x=-2;x<=2;x++){
+      for(let z=-2;z<=2;z++){
+        const tx=Math.floor(b.position.x+gridSize/2+x);
+        const tz=Math.floor(b.position.z+gridSize/2+z);
 
-if(tiles[tx] && tiles[tx][tz]){
-const dist=Math.sqrt(x*x+z*z);
-if(dist<2){
-tiles[tx][tz].material.color.set(0x00ffcc);
-}
-}
-}
-}
+        if(tiles[tx] && tiles[tx][tz]){
+          if(Math.sqrt(x*x+z*z)<2){
+            tiles[tx][tz].material.color.set(0x00ffcc);
+          }
+        }
+      }
+    }
 
-// 壁塗り
-walls.forEach(w=>{
-if(b.position.distanceTo(w.position)<1.5){
-w.material.color.set(0x00ffcc);
-}
-});
-
-scene.remove(b);
-bullets.splice(i,1);
-}
+    scene.remove(b);
+    bullets.splice(i,1);
+  }
 });
 
 // ===== カメラ =====
 const offset=new THREE.Vector3(
-Math.sin(yaw)*5,
-3+pitch*4,
-Math.cos(yaw)*5
+  Math.sin(yaw)*5,
+  3+pitch*4,
+  Math.cos(yaw)*5
 );
 
 camera.position.copy(player.position).add(offset);
@@ -298,3 +276,4 @@ renderer.setSize(innerWidth,innerHeight);
 </script>
 </body>
 </html>
+
