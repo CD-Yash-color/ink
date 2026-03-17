@@ -2,26 +2,28 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>インクバトル3D 改良版</title>
+<title>インクバトル修正版</title>
 <style>
-  body { margin: 0; overflow: hidden; background: black; }
-  #info {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    color: white;
-  }
+body { margin:0; overflow:hidden; background:black;}
+#info {
+  position:absolute;
+  top:10px;
+  left:10px;
+  color:white;
+}
 </style>
 </head>
 <body>
-<div id="info">WASD移動 / マウスで視点 / クリックで発射 / SPACEでジャンプ</div>
+<div id="info">クリックで開始 → WASD移動 / マウス視点 / クリック発射 / SPACEジャンプ</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
 // ===== 基本 =====
 const scene = new THREE.Scene();
+
 const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -34,18 +36,15 @@ scene.add(light);
 // ===== プレイヤー =====
 const player = new THREE.Mesh(
   new THREE.BoxGeometry(1,2,1),
-  new THREE.MeshLambertMaterial({color: 0x00ffcc})
+  new THREE.MeshLambertMaterial({color:0x00ffcc})
 );
-scene.add(player);
 player.position.y = 1;
-
-// ===== カメラ（三人称） =====
-let yaw = 0;
-let pitch = 0;
+scene.add(player);
 
 // ===== 地面 =====
 const gridSize = 20;
 const tiles = [];
+
 for(let x=0;x<gridSize;x++){
   tiles[x]=[];
   for(let z=0;z<gridSize;z++){
@@ -53,5 +52,172 @@ for(let x=0;x<gridSize;x++){
       new THREE.PlaneGeometry(1,1),
       new THREE.MeshLambertMaterial({color:0x555555})
     );
-    tile.rotatio
+    tile.rotation.x = -Math.PI/2;
+    tile.position.set(x-gridSize/2,0,z-gridSize/2);
+    scene.add(tile);
+    tiles[x][z]=tile;
+  }
+}
 
+// ===== 入力 =====
+const keys = {};
+document.addEventListener("keydown", e=>keys[e.key]=true);
+document.addEventListener("keyup", e=>keys[e.key]=false);
+
+// ===== マウスロック =====
+let yaw = 0;
+let pitch = 0;
+
+document.body.addEventListener("click", ()=>{
+  document.body.requestPointerLock();
+});
+
+document.addEventListener("mousemove", e=>{
+  if(document.pointerLockElement){
+    yaw -= e.movementX * 0.002;
+    pitch -= e.movementY * 0.002;
+    pitch = Math.max(-0.5, Math.min(0.5, pitch));
+  }
+});
+
+// ===== ジャンプ =====
+let velocityY = 0;
+let onGround = true;
+
+// ===== 弾とエフェクト分離 =====
+const bullets = [];
+const particles = [];
+
+// ===== 発射 =====
+document.addEventListener("mousedown", ()=>{
+  if(!document.pointerLockElement) return;
+
+  const bullet = new THREE.Mesh(
+    new THREE.SphereGeometry(0.2),
+    new THREE.MeshBasicMaterial({color:0x00ffcc})
+  );
+
+  bullet.position.copy(player.position);
+
+  const dir = new THREE.Vector3(
+    Math.sin(yaw),
+    0.1,
+    Math.cos(yaw)
+  ).normalize();
+
+  bullet.velocity = dir.multiplyScalar(0.5);
+
+  bullets.push(bullet);
+  scene.add(bullet);
+});
+
+// ===== 更新 =====
+function animate(){
+  requestAnimationFrame(animate);
+
+  const speed = 0.1;
+
+  // 移動
+  if(keys["w"]){
+    player.position.x -= Math.sin(yaw)*speed;
+    player.position.z -= Math.cos(yaw)*speed;
+  }
+  if(keys["s"]){
+    player.position.x += Math.sin(yaw)*speed;
+    player.position.z += Math.cos(yaw)*speed;
+  }
+  if(keys["a"]){
+    player.position.x -= Math.cos(yaw)*speed;
+    player.position.z += Math.sin(yaw)*speed;
+  }
+  if(keys["d"]){
+    player.position.x += Math.cos(yaw)*speed;
+    player.position.z -= Math.sin(yaw)*speed;
+  }
+
+  // ===== ジャンプ =====
+  if(keys[" "] && onGround){
+    velocityY = 0.2;
+    onGround = false;
+  }
+
+  velocityY -= 0.01;
+  player.position.y += velocityY;
+
+  if(player.position.y <= 1){
+    player.position.y = 1;
+    velocityY = 0;
+    onGround = true;
+  }
+
+  // ===== 弾 =====
+  bullets.forEach((b,i)=>{
+    b.position.add(b.velocity);
+
+    if(b.position.y <= 0.2){
+      const x = Math.floor(b.position.x + gridSize/2);
+      const z = Math.floor(b.position.z + gridSize/2);
+
+      if(tiles[x] && tiles[x][z]){
+        tiles[x][z].material.color.set(0x00ffcc);
+      }
+
+      // パーティクル生成
+      for(let j=0;j<5;j++){
+        const p = new THREE.Mesh(
+          new THREE.SphereGeometry(0.1),
+          new THREE.MeshBasicMaterial({color:0x00ffcc})
+        );
+        p.position.copy(b.position);
+        p.velocity = new THREE.Vector3(
+          (Math.random()-0.5)*0.2,
+          Math.random()*0.2,
+          (Math.random()-0.5)*0.2
+        );
+        p.life = 30;
+
+        particles.push(p);
+        scene.add(p);
+      }
+
+      scene.remove(b);
+      bullets.splice(i,1);
+    }
+  });
+
+  // ===== パーティクル =====
+  particles.forEach((p,i)=>{
+    p.position.add(p.velocity);
+    p.velocity.y -= 0.01;
+    p.life--;
+
+    if(p.life <= 0){
+      scene.remove(p);
+      particles.splice(i,1);
+    }
+  });
+
+  // ===== カメラ（三人称） =====
+  const offset = new THREE.Vector3(
+    Math.sin(yaw)*5,
+    3,
+    Math.cos(yaw)*5
+  );
+
+  camera.position.copy(player.position).add(offset);
+  camera.lookAt(player.position);
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// ===== リサイズ =====
+window.addEventListener("resize", ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
