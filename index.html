@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>インクバトル進化版2</title>
+<title>インクバトル最強版</title>
 <style>
 body { margin:0; overflow:hidden; background:black;}
 
@@ -14,16 +14,9 @@ body { margin:0; overflow:hidden; background:black;}
   border:2px solid white;
   border-radius:50%;
 }
-
-#info {
-  position:absolute;
-  top:10px; left:10px;
-  color:white;
-}
 </style>
 </head>
 <body>
-<div id="info">クリックで開始 / WASD移動 / マウスエイム / 長押しで発射 / SPACEジャンプ</div>
 <div id="crosshair"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -37,45 +30,50 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 // ===== ライト =====
-const light = new THREE.DirectionalLight(0xffffff,1);
-light.position.set(5,10,5);
-scene.add(light);
+scene.add(new THREE.DirectionalLight(0xffffff,1));
 
 // ===== プレイヤー =====
 const player = new THREE.Group();
-
-// 小さめスケール
 player.scale.set(0.7,0.7,0.7);
+scene.add(player);
 
-// 体
+// ===== 人型 =====
 const body = new THREE.Mesh(
   new THREE.BoxGeometry(1,1.5,0.5),
   new THREE.MeshLambertMaterial({color:0x00ffcc})
 );
 body.position.y = 1.5;
 
-// 頭
 const head = new THREE.Mesh(
   new THREE.SphereGeometry(0.4),
   new THREE.MeshLambertMaterial({color:0xffcc99})
 );
 head.position.y = 2.5;
 
-// 腕
 const arm = new THREE.Mesh(
   new THREE.BoxGeometry(0.3,1,0.3),
   body.material
 );
 arm.position.set(0.8,1.5,0);
 
-// 足
-const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.3,1,0.3), body.material);
-leg1.position.set(-0.2,0.5,0);
-const leg2 = leg1.clone();
-leg2.position.x = 0.2;
+// ===== 武器 =====
+const gun = new THREE.Mesh(
+  new THREE.BoxGeometry(0.8,0.3,0.3),
+  new THREE.MeshLambertMaterial({color:0x222222})
+);
+gun.position.set(1.2,1.5,0);
 
-player.add(body, head, arm, leg1, leg2);
-scene.add(player);
+player.add(body, head, arm, gun);
+
+// ===== イカ状態 =====
+const squid = new THREE.Mesh(
+  new THREE.ConeGeometry(0.6,1.2,8),
+  new THREE.MeshLambertMaterial({color:0x00ffcc})
+);
+squid.rotation.x = Math.PI;
+squid.position.y = 0.5;
+scene.add(squid);
+squid.visible = false;
 
 // ===== 地面 =====
 const gridSize = 20;
@@ -97,20 +95,25 @@ for(let x=0;x<gridSize;x++){
 
 // ===== 入力 =====
 const keys = {};
-let shooting = false;
+let shooting=false;
+let squidMode=false;
 
-document.addEventListener("keydown", e=>keys[e.key]=true);
-document.addEventListener("keyup", e=>keys[e.key]=false);
+document.addEventListener("keydown", e=>{
+  keys[e.key]=true;
+  if(e.key==="Shift") squidMode=true;
+});
+document.addEventListener("keyup", e=>{
+  keys[e.key]=false;
+  if(e.key==="Shift") squidMode=false;
+});
 
-document.addEventListener("mousedown", ()=> shooting = true);
-document.addEventListener("mouseup", ()=> shooting = false);
+document.addEventListener("mousedown", ()=> shooting=true);
+document.addEventListener("mouseup", ()=> shooting=false);
 
 // ===== マウス =====
-let yaw=0, pitch=0;
+let yaw=0,pitch=0;
 
-document.body.addEventListener("click", ()=>{
-  document.body.requestPointerLock();
-});
+document.body.onclick=()=>document.body.requestPointerLock();
 
 document.addEventListener("mousemove", e=>{
   if(document.pointerLockElement){
@@ -121,126 +124,144 @@ document.addEventListener("mousemove", e=>{
 });
 
 // ===== ジャンプ =====
-let vy=0, onGround=true;
+let vy=0,onGround=true;
 
 // ===== 弾 =====
 const bullets=[];
-const raycaster = new THREE.Raycaster();
-
-// 発射間隔
-let shootCooldown = 0;
+const raycaster=new THREE.Raycaster();
+let cooldown=0;
 
 // ===== 更新 =====
 function animate(){
-  requestAnimationFrame(animate);
+requestAnimationFrame(animate);
 
-  const speed = 0.1;
+// ===== 自分のインク判定 =====
+const tx = Math.floor(player.position.x + gridSize/2);
+const tz = Math.floor(player.position.z + gridSize/2);
 
-  // ===== 移動 =====
-  if(keys["w"]){
-    player.position.x -= Math.sin(yaw)*speed;
-    player.position.z -= Math.cos(yaw)*speed;
-  }
-  if(keys["s"]){
-    player.position.x += Math.sin(yaw)*speed;
-    player.position.z += Math.cos(yaw)*speed;
-  }
-  if(keys["a"]){
-    player.position.x -= Math.cos(yaw)*speed;
-    player.position.z += Math.sin(yaw)*speed;
-  }
-  if(keys["d"]){
-    player.position.x += Math.cos(yaw)*speed;
-    player.position.z -= Math.sin(yaw)*speed;
-  }
+let onInk=false;
+if(tiles[tx] && tiles[tx][tz]){
+  const c = tiles[tx][tz].material.color.getHex();
+  if(c === 0x00ffcc) onInk=true;
+}
 
-  player.rotation.y = yaw;
+// ===== モード切替 =====
+if(squidMode && onInk){
+  player.visible=false;
+  squid.visible=true;
+  squid.position.copy(player.position);
+}else{
+  player.visible=true;
+  squid.visible=false;
+}
 
-  // ===== ジャンプ =====
+// ===== 移動速度 =====
+let speed = (squidMode && onInk) ? 0.2 : 0.1;
+
+// ===== 移動 =====
+if(keys["w"]){
+  player.position.x -= Math.sin(yaw)*speed;
+  player.position.z -= Math.cos(yaw)*speed;
+}
+if(keys["s"]){
+  player.position.x += Math.sin(yaw)*speed;
+  player.position.z += Math.cos(yaw)*speed;
+}
+if(keys["a"]){
+  player.position.x -= Math.cos(yaw)*speed;
+  player.position.z += Math.sin(yaw)*speed;
+}
+if(keys["d"]){
+  player.position.x += Math.cos(yaw)*speed;
+  player.position.z -= Math.sin(yaw)*speed;
+}
+
+player.rotation.y = yaw;
+squid.rotation.y = yaw;
+
+// ===== ジャンプ（人のみ） =====
+if(!squidMode){
   if(keys[" "] && onGround){
     vy=0.2;
     onGround=false;
   }
-
   vy -= 0.01;
   player.position.y += vy;
 
   if(player.position.y <= 0){
-    player.position.y = 0;
+    player.position.y=0;
     vy=0;
     onGround=true;
   }
+}
 
-  // ===== 発射（長押し） =====
-  shootCooldown--;
+// ===== 発射 =====
+cooldown--;
 
-  if(shooting && shootCooldown <= 0){
-    shootCooldown = 10;
+if(shooting && cooldown<=0 && !squidMode){
+  cooldown=8;
 
-    raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
-    const dir = raycaster.ray.direction.clone();
+  raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+  const dir = raycaster.ray.direction.clone();
 
-    const spawn = player.position.clone();
-    spawn.y += 1.5;
-
-    const bullet = new THREE.Mesh(
-      new THREE.SphereGeometry(0.15),
-      new THREE.MeshBasicMaterial({color:0x00ffcc})
-    );
-
-    bullet.position.copy(spawn);
-    bullet.velocity = dir.multiplyScalar(0.4);
-
-    bullets.push(bullet);
-    scene.add(bullet);
-
-    // ===== 腕ポーズ =====
-    arm.rotation.x = -1.2;
-  } else {
-    // 戻す
-    arm.rotation.x *= 0.8;
-  }
-
-  // ===== 弾 =====
-  bullets.forEach((b,i)=>{
-    b.velocity.y -= 0.01;
-    b.position.add(b.velocity);
-
-    if(b.position.y <= 0.1){
-      const x = Math.floor(b.position.x + gridSize/2);
-      const z = Math.floor(b.position.z + gridSize/2);
-
-      if(tiles[x] && tiles[x][z]){
-        tiles[x][z].material.color.set(0x00ffcc);
-      }
-
-      scene.remove(b);
-      bullets.splice(i,1);
-    }
-  });
-
-  // ===== カメラ =====
-  const offset = new THREE.Vector3(
-    Math.sin(yaw)*5,
-    3 + pitch*4,
-    Math.cos(yaw)*5
+  const bullet = new THREE.Mesh(
+    new THREE.SphereGeometry(0.15),
+    new THREE.MeshBasicMaterial({color:0x00ffcc})
   );
 
-  camera.position.copy(player.position).add(offset);
-  camera.lookAt(player.position.clone().add(new THREE.Vector3(0,1.5,0)));
+  const spawn = player.position.clone();
+  spawn.y += 1.5;
+  bullet.position.copy(spawn);
 
-  renderer.render(scene, camera);
+  bullet.velocity = dir.multiplyScalar(0.4);
+
+  bullets.push(bullet);
+  scene.add(bullet);
+
+  arm.rotation.x = -1.2;
+}else{
+  arm.rotation.x *= 0.8;
+}
+
+// ===== 弾更新 =====
+bullets.forEach((b,i)=>{
+  b.velocity.y -= 0.01;
+  b.position.add(b.velocity);
+
+  if(b.position.y <= 0.1){
+    const x = Math.floor(b.position.x + gridSize/2);
+    const z = Math.floor(b.position.z + gridSize/2);
+
+    if(tiles[x] && tiles[x][z]){
+      tiles[x][z].material.color.set(0x00ffcc);
+    }
+
+    scene.remove(b);
+    bullets.splice(i,1);
+  }
+});
+
+// ===== カメラ =====
+const offset = new THREE.Vector3(
+  Math.sin(yaw)*5,
+  3 + pitch*4,
+  Math.cos(yaw)*5
+);
+
+camera.position.copy(player.position).add(offset);
+camera.lookAt(player.position.clone().add(new THREE.Vector3(0,1.5,0)));
+
+renderer.render(scene,camera);
 }
 
 animate();
 
 // ===== リサイズ =====
-window.addEventListener("resize", ()=>{
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
+window.onresize=()=>{
+camera.aspect=innerWidth/innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(innerWidth,innerHeight);
+};
 </script>
 </body>
 </html>
-
