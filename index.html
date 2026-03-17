@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>インクバトル3D</title>
+<title>インクバトル3D 改良版</title>
 <style>
   body { margin: 0; overflow: hidden; background: black; }
   #info {
@@ -10,17 +10,16 @@
     top: 10px;
     left: 10px;
     color: white;
-    font-family: sans-serif;
   }
 </style>
 </head>
 <body>
-<div id="info">WASD移動 / マウスで視点 / クリックで塗る</div>
+<div id="info">WASD移動 / マウスで視点 / クリックで発射 / SPACEでジャンプ</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
-// ===== 基本セット =====
+// ===== 基本 =====
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer();
@@ -33,90 +32,26 @@ light.position.set(5,10,5);
 scene.add(light);
 
 // ===== プレイヤー =====
-camera.position.set(0, 2, 5);
+const player = new THREE.Mesh(
+  new THREE.BoxGeometry(1,2,1),
+  new THREE.MeshLambertMaterial({color: 0x00ffcc})
+);
+scene.add(player);
+player.position.y = 1;
 
-// ===== 地面（グリッド） =====
-const gridSize = 20;
-const tiles = [];
-const tileSize = 1;
-
-for(let x=0;x<gridSize;x++){
-  tiles[x] = [];
-  for(let z=0;z<gridSize;z++){
-    const geo = new THREE.PlaneGeometry(tileSize, tileSize);
-    const mat = new THREE.MeshLambertMaterial({color: 0x555555});
-    const tile = new THREE.Mesh(geo, mat);
-
-    tile.rotation.x = -Math.PI/2;
-    tile.position.set(x - gridSize/2, 0, z - gridSize/2);
-
-    scene.add(tile);
-    tiles[x][z] = tile;
-  }
-}
-
-// ===== 操作 =====
-const keys = {};
-document.addEventListener("keydown", e => keys[e.key] = true);
-document.addEventListener("keyup", e => keys[e.key] = false);
-
-// マウス視点
+// ===== カメラ（三人称） =====
 let yaw = 0;
 let pitch = 0;
 
-document.addEventListener("mousemove", e => {
-  yaw -= e.movementX * 0.002;
-  pitch -= e.movementY * 0.002;
-  pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
-});
+// ===== 地面 =====
+const gridSize = 20;
+const tiles = [];
+for(let x=0;x<gridSize;x++){
+  tiles[x]=[];
+  for(let z=0;z<gridSize;z++){
+    const tile = new THREE.Mesh(
+      new THREE.PlaneGeometry(1,1),
+      new THREE.MeshLambertMaterial({color:0x555555})
+    );
+    tile.rotatio
 
-// ===== インク発射 =====
-document.addEventListener("click", () => {
-  const dir = new THREE.Vector3(
-    Math.sin(yaw),
-    0,
-    Math.cos(yaw)
-  );
-
-  const pos = camera.position.clone();
-
-  for(let i=1;i<6;i++){
-    const x = Math.floor(pos.x + dir.x * i + gridSize/2);
-    const z = Math.floor(pos.z + dir.z * i + gridSize/2);
-
-    if(tiles[x] && tiles[x][z]){
-      tiles[x][z].material.color.set(0x00ffcc);
-    }
-  }
-});
-
-// ===== 更新 =====
-function animate(){
-  requestAnimationFrame(animate);
-
-  // 移動
-  const speed = 0.1;
-  if(keys["w"]) camera.position.z -= Math.cos(yaw)*speed, camera.position.x -= Math.sin(yaw)*speed;
-  if(keys["s"]) camera.position.z += Math.cos(yaw)*speed, camera.position.x += Math.sin(yaw)*speed;
-  if(keys["a"]) camera.position.x -= Math.cos(yaw)*speed, camera.position.z += Math.sin(yaw)*speed;
-  if(keys["d"]) camera.position.x += Math.cos(yaw)*speed, camera.position.z -= Math.sin(yaw)*speed;
-
-  // カメラ向き
-  camera.rotation.order = "YXZ";
-  camera.rotation.y = yaw;
-  camera.rotation.x = pitch;
-
-  renderer.render(scene, camera);
-}
-
-animate();
-
-// リサイズ対応
-window.addEventListener("resize", () => {
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-</script>
-</body>
-</html>
