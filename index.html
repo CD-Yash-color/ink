@@ -2,33 +2,28 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>インクバトル進化版</title>
+<title>インクバトル完成版</title>
 <style>
 body { margin:0; overflow:hidden; background:black;}
 
-/* クロスヘア */
 #crosshair {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 10px;
-  height: 10px;
-  margin-left: -5px;
-  margin-top: -5px;
-  border: 2px solid white;
-  border-radius: 50%;
+  position:absolute;
+  top:50%; left:50%;
+  width:12px; height:12px;
+  margin:-6px;
+  border:2px solid white;
+  border-radius:50%;
 }
 
 #info {
   position:absolute;
-  top:10px;
-  left:10px;
+  top:10px; left:10px;
   color:white;
 }
 </style>
 </head>
 <body>
-<div id="info">クリックで開始 / WASD移動 / マウスでエイム / クリック発射 / SPACEジャンプ</div>
+<div id="info">クリックで開始 / WASD移動 / マウスでエイム / クリックで発射 / SPACEジャンプ</div>
 <div id="crosshair"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -42,16 +37,34 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 // ===== ライト =====
-const light = new THREE.DirectionalLight(0xffffff, 1);
+const light = new THREE.DirectionalLight(0xffffff,1);
 light.position.set(5,10,5);
 scene.add(light);
 
-// ===== プレイヤー =====
-const player = new THREE.Mesh(
-  new THREE.BoxGeometry(1,2,1),
+// ===== プレイヤー（人型） =====
+const player = new THREE.Group();
+
+// 体
+const body = new THREE.Mesh(
+  new THREE.BoxGeometry(1,1.5,0.5),
   new THREE.MeshLambertMaterial({color:0x00ffcc})
 );
-player.position.y = 1;
+body.position.y = 1.5;
+
+// 頭
+const head = new THREE.Mesh(
+  new THREE.SphereGeometry(0.4),
+  new THREE.MeshLambertMaterial({color:0xffcc99})
+);
+head.position.y = 2.5;
+
+// 足
+const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.3,1,0.3), body.material);
+leg1.position.set(-0.2,0.5,0);
+const leg2 = leg1.clone();
+leg2.position.x = 0.2;
+
+player.add(body, head, leg1, leg2);
 scene.add(player);
 
 // ===== 地面 =====
@@ -77,9 +90,8 @@ const keys = {};
 document.addEventListener("keydown", e=>keys[e.key]=true);
 document.addEventListener("keyup", e=>keys[e.key]=false);
 
-// ===== マウスロック =====
-let yaw = 0;
-let pitch = 0;
+// ===== マウス =====
+let yaw=0, pitch=0;
 
 document.body.addEventListener("click", ()=>{
   document.body.requestPointerLock();
@@ -87,43 +99,40 @@ document.body.addEventListener("click", ()=>{
 
 document.addEventListener("mousemove", e=>{
   if(document.pointerLockElement){
-    yaw -= e.movementX * 0.002;
-    pitch -= e.movementY * 0.002;
-    pitch = Math.max(-0.5, Math.min(0.5, pitch));
+    yaw -= e.movementX*0.002;
+    pitch -= e.movementY*0.002;
+    pitch = Math.max(-0.6, Math.min(0.6, pitch));
   }
 });
 
 // ===== ジャンプ =====
-let velocityY = 0;
-let onGround = true;
+let vy=0, onGround=true;
 
 // ===== 弾 =====
-const bullets = [];
+const bullets=[];
+
+// ===== Raycast用 =====
+const raycaster = new THREE.Raycaster();
 
 // ===== 発射 =====
 document.addEventListener("mousedown", ()=>{
   if(!document.pointerLockElement) return;
+
+  // クロスヘア中心からレイ
+  raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+
+  const direction = raycaster.ray.direction.clone();
+
+  // プレイヤー前方から発射
+  const spawn = player.position.clone();
+  spawn.y += 1.5;
 
   const bullet = new THREE.Mesh(
     new THREE.SphereGeometry(0.2),
     new THREE.MeshBasicMaterial({color:0x00ffcc})
   );
 
-  // プレイヤーの少し前から発射
-  const forward = new THREE.Vector3(
-    Math.sin(yaw),
-    0,
-    Math.cos(yaw)
-  );
-
-  bullet.position.copy(player.position).add(forward.clone().multiplyScalar(1));
-
-  // エイム方向（上下も含む）
-  const direction = new THREE.Vector3(
-    Math.sin(yaw),
-    Math.sin(pitch),
-    Math.cos(yaw)
-  ).normalize();
+  bullet.position.copy(spawn);
 
   bullet.velocity = direction.multiplyScalar(0.4);
 
@@ -155,28 +164,30 @@ function animate(){
     player.position.z -= Math.sin(yaw)*speed;
   }
 
+  // 向き
+  player.rotation.y = yaw;
+
   // ===== ジャンプ =====
   if(keys[" "] && onGround){
-    velocityY = 0.2;
-    onGround = false;
+    vy=0.2;
+    onGround=false;
   }
 
-  velocityY -= 0.01;
-  player.position.y += velocityY;
+  vy -= 0.01;
+  player.position.y += vy;
 
-  if(player.position.y <= 1){
-    player.position.y = 1;
-    velocityY = 0;
-    onGround = true;
+  if(player.position.y <= 0){
+    player.position.y = 0;
+    vy=0;
+    onGround=true;
   }
 
-  // ===== 弾更新（物理） =====
+  // ===== 弾 =====
   bullets.forEach((b,i)=>{
-    b.velocity.y -= 0.01; // 重力
+    b.velocity.y -= 0.01;
     b.position.add(b.velocity);
 
-    // 着弾
-    if(b.position.y <= 0.2){
+    if(b.position.y <= 0.1){
       const x = Math.floor(b.position.x + gridSize/2);
       const z = Math.floor(b.position.z + gridSize/2);
 
@@ -189,15 +200,15 @@ function animate(){
     }
   });
 
-  // ===== 三人称カメラ =====
-  const camOffset = new THREE.Vector3(
+  // ===== カメラ（三人称） =====
+  const offset = new THREE.Vector3(
     Math.sin(yaw)*5,
-    3 + pitch*5,
+    3 + pitch*4,
     Math.cos(yaw)*5
   );
 
-  camera.position.copy(player.position).add(camOffset);
-  camera.lookAt(player.position.clone().add(new THREE.Vector3(0,1,0)));
+  camera.position.copy(player.position).add(offset);
+  camera.lookAt(player.position.clone().add(new THREE.Vector3(0,1.5,0)));
 
   renderer.render(scene, camera);
 }
